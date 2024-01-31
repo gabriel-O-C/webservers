@@ -21,6 +21,7 @@ func main() {
 	corsMux := middlewareCors(mux)
 
 	mux.Handle("/", http.FileServer(http.Dir(".")))
+	mux.Handle("/assets", http.FileServer(http.Dir("./assets")))
 
 	http.ListenAndServe(":8080", corsMux)
 
