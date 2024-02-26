@@ -1,28 +1,42 @@
 package main
 
-import "net/http"
+import (
+	"log"
+	"net/http"
 
-func middlewareCors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	"github.com/go-chi/chi/v5"
+)
+
+type apiConfig struct {
+	fileserverHits int
 }
 
 func main() {
-	mux := http.NewServeMux()
+	const filepathRoot = "."
+	const port = "8080"
 
-	corsMux := middlewareCors(mux)
+	apiCfg := apiConfig{
+		fileserverHits: 0,
+	}
 
-	mux.Handle("/", http.FileServer(http.Dir(".")))
-	mux.Handle("/assets", http.FileServer(http.Dir("./assets")))
+	r := chi.NewRouter()
 
-	http.ListenAndServe(":8080", corsMux)
+	fsHandler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
+
+	r.Handle("/app", fsHandler)
+	r.Handle("/app/*", fsHandler)
+
+	r.Get("/healthz", handlerReadiness)
+	r.Get("/metrics", apiCfg.handlerMetrics)
+	r.Get("/reset", apiCfg.handlerReset)
+
+	corsMux := middlewareCors(r)
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: corsMux,
+	}
+
+	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
+	log.Fatal(srv.ListenAndServe())
 
 }
